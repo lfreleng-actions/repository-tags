@@ -26,44 +26,65 @@ jobs:
     runs-on: ubuntu-24.04
     permissions:
       contents: read
-    timeout-minutes: 10 # Increase this timeout value as needed
+    timeout-minutes: 3 # Increase this timeout value as needed
     steps:
       - name: "Checkout repository"
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
-      # Perform setup prior to running test(s)
-      - name: "Testing setup step"
-        shell: bash
-        run: |
-          # Testing setup step
-          echo "Testing setup step"
-          echo "Testing setup step/summary output" >> "$GITHUB_STEP_SUMMARY"
+      # Test local action
+      - name: "Run action: ${{ github.repository }}"
+        id: test-local
+        uses: ./
 
-      - name: "Running local action: ${{ github.repository }}"
+      # Test local action
+      - name: "Run action: ${{ github.repository }} [test-tags-semver]"
+        id: semver
         uses: ./
         with:
-          input: "test input 💬"
+          repository: 'lfreleng-actions/test-tags-semantic'
+          path: 'test-tags-semantic'
 
-      - name: "Validated local action: ${{ github.repository }}"
-        shell: bash
-        run: |
-          # Local action validation
-          echo "Validated local action: ${{ github.repository }}"
-          echo "Validation step summary output" >> "$GITHUB_STEP_SUMMARY"
-
-      # yamllint disable-line rule:line-length
-      - name: "Running local action: ${{ github.repository }} [Override Failure]"
+      # Test local action
+      - name: "Run action: ${{ github.repository }} [test-tags-calver]"
+        id: calver
         uses: ./
-        id: failure
-        continue-on-error: true
         with:
-          invalid_input: "Some garbage"
+          repository: 'lfreleng-actions/test-tags-calver'
+          path: 'test-tags-calver'
 
-      # Failure testing is also important
-      - name: "Error if step above did NOT fail"
-        if: steps.failure.outcome == 'success'
+      - name: "Validate action: ${{ github.repository }}"
         shell: bash
         run: |
-          # Error if step above did NOT fail
-          echo "Error: previous test step did NOT fail ❌"
-          exit 1
+          # Validate Action Output
+          if [ "${{ steps.semver.outputs.tag }}" \
+            != 'v0.1.1' ]; then
+            echo 'Error: did not get expected semantic tag result ❌'
+            echo "Returned: ${{ steps.semver.outputs.tag }}"
+            echo 'Expected: v0.1.1'
+            errors='true'
+          elif [ "${{ steps.semver.outputs.tag_count }}" \
+            != '2' ]; then
+            echo 'Error: did not get expected semver count ❌'
+            echo "Returned: ${{ steps.semver.outputs.tag_count }}"
+            echo 'Expected: 2'
+            errors='true'
+          elif [ "${{ steps.calver.outputs.tag }}" \
+            != '2025.02.01' ]; then
+            echo 'Error: did not get expected calver tag result ❌'
+            echo "Returned: ${{ steps.calver.outputs.tag }}"
+            echo 'Expected: 2025.02.01'
+            errors='true'
+          elif [ "${{ steps.calver.outputs.tag_count }}" \
+            != '3' ]; then
+            echo 'Error: did not get expected calver count ❌'
+            echo "Returned: ${{ steps.calver.outputs.tag_count }}"
+            echo 'Expected: 3'
+            errors='true'
+          fi
+
+          if [ "$errors" == 'true' ]; then
+            echo 'Action validation failed ❌'
+            exit 1
+          else
+            echo 'Action validation passed ✅'
+          fi

@@ -2,36 +2,157 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: 2025 The Linux Foundation
 
-# actions-template
-name: "🛠️ Actions Template"
-description: "Description of action"
-# Any relevant notes/observations can go here
+# repository-tags
+name: '🏷️ Repository Tags'
+# yamllint disable-line rule:line-length
+description: 'Fetches tags, counts them, identifies the latest/current tag, determines type'
 
 inputs:
-  input:
-    description: "Description of input"
-    required: true
+  # Optional
+  type:
+    description: 'Tag types to parse/accept [production|development|both]'
+    required: false
+    type: 'string'
+    default: 'both'
+  repository:
+    description: 'Repository to checkout and fetch tags from'
+    required: false
+    type: 'string'
+    default: '${{ github.repository }}'
+  path:
+    description: 'Relative path under $GITHUB_WORKSPACE to place the repository'
+    required: false
+    type: 'string'
+    default: '.'
 
 outputs:
-  output:
-    description: "Description of output"
-    value: ${{ steps.code.outputs.output }}
-
+  tag_count:
+    description: 'The number of tags in the repository'
+    value: "${{ steps.fetch.outputs.tag_count }}"
+  tag:
+    description: 'The current/latest tag from repository'
+    value: "${{ steps.latest.outputs.tag }}"
+  numeric_tag:
+    description: 'The tag [without any v/V prefix] e.g. 1.2.3'
+    value: "${{ steps.latest.outputs.numeric_tag }}"
+  semantic:
+    description: 'Set true if current tag is semantic'
+    value: "${{ steps.semantic-check.outputs.valid }}"
+  calver:
+    description: 'Set true if current tag uses calendar versioning'
+    value: "${{ steps.calver-check.outputs.valid }}"
 runs:
-  using: "composite"
+  using: 'composite'
   steps:
-    - name: "Friendly Name"
-      id: code
+    - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      with:
+        repository: "${{ inputs.repository }}"
+        path: "${{ inputs.path }}"
+
+    - name: 'Fetch repository tags'
+      id: 'fetch'
+      shell: bash
+      if: startsWith(github.ref, 'refs/tags/') != 'true'
+      # Don't fetch tags if a tag was pushed, it will result in an error, e.g.
+      # Fetching tags...
+      # From https://github.com/os-climate/osc-github-devops
+      #  * [new branch]      main       -> origin/main
+      #  * [new tag]         v0.0.0     -> v0.0.0
+      #  ! [rejected]        v0.0.2     -> v0.0.2  (would clobber existing tag)
+      run: |
+        # Fetch repository tags
+        if [ "${{ inputs.path }}" != '.' ]; then
+          cd "${{ inputs.path }}"
+        fi
+        # Workaround for: https://github.com/actions/checkout/issues/1471
+        echo "Fetching tags..."
+        git fetch --tags
+
+        # Count tags in repository so subsequent steps can be conditional
+        tag_count=$(git tag -l | wc -l)
+        echo "Tag count: $tag_count #️⃣"
+        echo "tag_count=$tag_count" >> "$GITHUB_ENV"
+        echo "tag_count=$tag_count" >> "$GITHUB_OUTPUT"
+
+    - name: 'No tags found in repository'
+      if: env.tag_count == '0'
       shell: bash
       run: |
-        # Friendly Name
-        input="${{ inputs.input }}"
-        if [ -z "$input" ]; then
-          echo "Error: mandatory input was not set/configured ❌"
+        # No tags found in repository
+        echo 'Warning: no tags currently found in repository ⚠️' \
+          >> "$GITHUB_STEP_SUMMARY"
+        echo 'Warning: no tags currently found in repository ⚠️'
+
+    - name: 'Return current/latest tag'
+      if: env.tag_count != '0'
+      id: 'latest'
+      shell: bash
+      # yamllint disable rule:line-length
+      run: |
+        # Return current/latest tag
+        if [ "${{ inputs.path }}" != '.' ]; then
+          cd "${{ inputs.path }}"
+        fi
+
+        if [ ${{ inputs.type }} = 'both' ]; then
+          tag=$(git tag -l --sort=committerdate | grep -o '?*.*.*' | \
+          sort -rV | head -1 || true)
+        elif [ ${{ inputs.type }} = 'production' ]; then
+          tag=$(git tag -l --sort=committerdate | grep -o '?*.*.*' | \
+          grep -Ev '(dev|alpha|beta|test)' | sort -rV | head -1 || true)
+        elif [ ${{ inputs.type }} = 'development' ]; then
+          tag=$(git tag -l --sort=committerdate | grep -o '?*.*.*' | \
+          grep -E '(dev|pre|beta|test|alpha)' | sort -rV | head -1 || true)
+        else
+          echo 'Error: invalid tag type requested ❌' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Error: invalid tag type requested ❌'
           exit 1
         fi
 
-        echo "output=$input" >> "$GITHUB_ENV"
-        echo "output=$input" >> "$GITHUB_OUTPUT"
-        echo "Action received: $input ✅"
-        echo "Action received: $input ✅" >> "$GITHUB_STEP_SUMMARY"
+        # Extract only numbers and dots; useful for later manipulation
+        numeric_tag=$(echo $tag | grep -oe '\([0-9.]*\)')
+
+        echo "tag: ${tag} [${numeric_tag}]"
+        echo "Current/latest repository tag: ${tag} [${numeric_tag}] 🏷️" \
+          >> "$GITHUB_STEP_SUMMARY"
+        echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+        echo "tag=${tag}" >> "$GITHUB_ENV"
+        echo "numeric_tag=${numeric_tag}" >> "$GITHUB_OUTPUT"
+        echo "numeric_tag=${numeric_tag}" >> "$GITHUB_ENV"
+
+    # yamllint enable rule:line-length
+    - name: 'Check if tag is semantic'
+      id: 'semantic-check'
+      # Do not run if no tag was found
+      if: env.tag != ''
+      # yamllint disable-line rule:line-length
+      uses: lfreleng-actions/tag-validate-semantic-action@0371424cc6cf23c5f84ab11faf675c969014706d # v0.2.0
+      with:
+        string: "${{ env.tag }}"
+
+    - name: 'Check if tag uses calendar versioning'
+      id: 'calver-check'
+      # Do not run if no tag was found
+      if: env.tag != ''
+      # yamllint disable-line rule:line-length
+      uses: lfreleng-actions/tag-validate-calver-action@c0684c67ba3a9f6f0c607f32eda6bd8d1564b2be # v0.1.0
+      with:
+        string: "${{ env.tag }}"
+
+    - name: 'Report tag format/type'
+      # Do not run if no tag was found
+      if: env.tag != ''
+      shell: bash
+      # yamllint disable rule:line-length
+      run: |
+        # Report tag format/type
+        if [ "${{ steps.semantic-check.outputs.valid }}" = 'true' ]; then
+          echo 'Current/latest repository tag is semantic ✅' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Current/latest repository tag is semantic ✅'
+        elif [ "${{ steps.calver-check.outputs.valid }}" = 'true' ]; then
+          echo 'Current/latest repository tag uses calver ✅' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Current/latest repository tag uses calver ✅'
+        else
+          echo 'Could not identify tag type ⚠️' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Could not identify tag format/type ⚠️'
+        fi

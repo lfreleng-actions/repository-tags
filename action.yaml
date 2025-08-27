@@ -135,7 +135,7 @@ runs:
       # Do not run if no tag was found
       if: env.tag != ''
       # yamllint disable-line rule:line-length
-      uses: lfreleng-actions/tag-validate-calver-action@c0684c67ba3a9f6f0c607f32eda6bd8d1564b2be # v0.1.0
+      uses: lfreleng-actions/tag-validate-calver-action@7df739af1f55b00e04e739b774aa77ad340240d0 # v0.1.1
       with:
         string: "${{ env.tag }}"
 

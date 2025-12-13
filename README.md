@@ -31,6 +31,8 @@ steps:
 | repository | False    | current            | Repository to checkout and fetch tags from                    |
 | path       | False    | .                  | Relative path under $GITHUB_WORKSPACE to place the repository |
 
+<!-- markdownlint-enable MD013 -->
+
 A checkout is NOT performed if a repository is not provided/specified as input.
 
 <!-- markdownlint-enable MD013 -->

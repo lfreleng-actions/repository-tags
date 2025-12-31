@@ -12,17 +12,17 @@ inputs:
   type:
     description: 'Tag types to parse/accept [production|development|both]'
     required: false
-    type: 'string'
+    # type: 'string'
     default: 'both'
   repository:
     description: 'Repository to checkout and fetch tags from'
     required: false
-    type: 'string'
+    # type: 'string'
     default: '${{ github.repository }}'
   path:
     description: 'Relative path under $GITHUB_WORKSPACE to place the repository'
     required: false
-    type: 'string'
+    # type: 'string'
     default: '.'
 
 outputs:

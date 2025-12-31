@@ -75,10 +75,10 @@ jobs:
             echo 'Expected: 2025.02.01'
             errors='true'
           elif [ "${{ steps.calver.outputs.tag_count }}" \
-            != '3' ]; then
+            != '2' ]; then
             echo 'Error: did not get expected calver count ❌'
             echo "Returned: ${{ steps.calver.outputs.tag_count }}"
-            echo 'Expected: 3'
+            echo 'Expected: 2'
             errors='true'
           fi
 

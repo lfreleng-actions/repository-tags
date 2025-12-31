@@ -69,7 +69,30 @@ runs:
         git fetch --tags
 
         # Count tags in repository so subsequent steps can be conditional
-        tag_count=$(git tag -l | wc -l)
+        # Apply the same filtering logic based on type parameter
+        # Note: 'both' and 'production' accept both semantic (v1.2.3)
+        # and calver (2025.02.01) formats, but ONLY clean versions.
+        # The $ anchor excludes pre-release suffixes like -dev, -alpha
+        if [ "${{ inputs.type }}" = 'both' ] || \
+          [ "${{ inputs.type }}" = 'production' ]; then
+          tag_count=$(git tag -l | \
+          grep -E \
+            '^(v?[0-9]+\.[0-9]+\.[0-9]+|[0-9]{4}\.[0-9]{1,2}\.[0-9]{1,2})$' \
+            | wc -l)
+        elif [ "${{ inputs.type }}" = 'development' ]; then
+          # Match semantic versions with pre-release identifiers
+          # Note: .* is intentionally permissive to match various separators
+          # (-._) and formats like: v1.2.3-dev, v1.2.3-alpha.1, v1.2.3_beta
+          tag_count=$(git tag -l | \
+          grep -E '^v?[0-9]+\.[0-9]+\.[0-9]+.*(dev|pre|beta|test|alpha)' | \
+          wc -l)
+        else
+          {
+            echo "Error: Invalid tag type '${{ inputs.type }}' ❌"
+            echo "Must be one of: production, development, both."
+          } >&2
+          exit 1
+        fi
         echo "Tag count: $tag_count #️⃣"
         echo "tag_count=$tag_count" >> "$GITHUB_ENV"
         echo "tag_count=$tag_count" >> "$GITHUB_OUTPUT"
@@ -94,18 +117,22 @@ runs:
           cd "${{ inputs.path }}"
         fi
 
-        if [ ${{ inputs.type }} = 'both' ]; then
-          tag=$(git tag -l --sort=committerdate | grep -o '?*.*.*' | \
+        # 'both' and 'production': Match only clean semantic/calver versions
+        # The $ anchor ensures tags with suffixes (e.g., v1.0.0-dev) are excluded
+        if [ "${{ inputs.type }}" = 'both' ] || [ "${{ inputs.type }}" = 'production' ]; then
+          tag=$(git tag -l --sort=committerdate | \
+          grep -E '^(v?[0-9]+\.[0-9]+\.[0-9]+|[0-9]{4}\.[0-9]{1,2}\.[0-9]{1,2})$' | \
           sort -rV | head -1 || true)
-        elif [ ${{ inputs.type }} = 'production' ]; then
-          tag=$(git tag -l --sort=committerdate | grep -o '?*.*.*' | \
-          grep -Ev '(dev|alpha|beta|test)' | sort -rV | head -1 || true)
-        elif [ ${{ inputs.type }} = 'development' ]; then
-          tag=$(git tag -l --sort=committerdate | grep -o '?*.*.*' | \
-          grep -E '(dev|pre|beta|test|alpha)' | sort -rV | head -1 || true)
+        elif [ "${{ inputs.type }}" = 'development' ]; then
+          # Match semantic versions with pre-release identifiers anywhere after version
+          # Note: .* is intentionally permissive to match various separators
+          # (-._) and formats like: v1.2.3-dev, v1.2.3-alpha.1, v1.2.3_beta
+          tag=$(git tag -l --sort=committerdate | \
+          grep -E '^v?[0-9]+\.[0-9]+\.[0-9]+.*(dev|pre|beta|test|alpha)' | \
+          sort -rV | head -1 || true)
         else
-          echo 'Error: invalid tag type requested ❌' >> "$GITHUB_STEP_SUMMARY"
-          echo 'Error: invalid tag type requested ❌'
+          echo 'Error: Invalid tag type requested ❌' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Error: Invalid tag type requested ❌'
           exit 1
         fi
 

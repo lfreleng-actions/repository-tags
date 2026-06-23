@@ -44,10 +44,15 @@ outputs:
 runs:
   using: 'composite'
   steps:
+    # The persisted checkout credentials are intentionally retained so
+    # the 'git fetch --tags' step below can reach private repositories;
+    # this action exposes no token input of its own, and it uploads no
+    # artifacts that could leak the credential.
     - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       with:
         repository: "${{ inputs.repository }}"
         path: "${{ inputs.path }}"
+        persist-credentials: true # zizmor: ignore[artipacked]
 
     - name: 'Fetch repository tags'
       id: 'fetch'
@@ -59,10 +64,13 @@ runs:
       #  * [new branch]      main       -> origin/main
       #  * [new tag]         v0.0.0     -> v0.0.0
       #  ! [rejected]        v0.0.2     -> v0.0.2  (would clobber existing tag)
+      env:
+        REPO_PATH: ${{ inputs.path }}
+        TYPE: ${{ inputs.type }}
       run: |
         # Fetch repository tags
-        if [ "${{ inputs.path }}" != '.' ]; then
-          cd "${{ inputs.path }}"
+        if [ "$REPO_PATH" != '.' ]; then
+          cd "$REPO_PATH"
         fi
         # Workaround for: https://github.com/actions/checkout/issues/1471
         echo "Fetching tags..."
@@ -73,32 +81,33 @@ runs:
         # Note: 'both' and 'production' accept both semantic (v1.2.3)
         # and calver (2025.02.01) formats, but ONLY clean versions.
         # The $ anchor excludes pre-release suffixes like -dev, -alpha
-        if [ "${{ inputs.type }}" = 'both' ] || \
-          [ "${{ inputs.type }}" = 'production' ]; then
+        if [ "$TYPE" = 'both' ] || \
+          [ "$TYPE" = 'production' ]; then
+          # 'grep -c' with '|| true' so zero matches yields '0' instead
+          # of failing the step under bash '-eo pipefail'.
           tag_count=$(git tag -l | \
-          grep -E \
+          grep -cE \
             '^(v?[0-9]+\.[0-9]+\.[0-9]+|[0-9]{4}\.[0-9]{1,2}\.[0-9]{1,2})$' \
-            | wc -l)
-        elif [ "${{ inputs.type }}" = 'development' ]; then
+            || true)
+        elif [ "$TYPE" = 'development' ]; then
           # Match semantic versions with pre-release identifiers
           # Note: .* is intentionally permissive to match various separators
           # (-._) and formats like: v1.2.3-dev, v1.2.3-alpha.1, v1.2.3_beta
           tag_count=$(git tag -l | \
-          grep -E '^v?[0-9]+\.[0-9]+\.[0-9]+.*(dev|pre|beta|test|alpha)' | \
-          wc -l)
+          grep -cE '^v?[0-9]+\.[0-9]+\.[0-9]+.*(dev|pre|beta|test|alpha)' \
+          || true)
         else
           {
-            echo "Error: Invalid tag type '${{ inputs.type }}' ❌"
+            echo "Error: Invalid tag type '$TYPE' ❌"
             echo "Must be one of: production, development, both."
           } >&2
           exit 1
         fi
         echo "Tag count: $tag_count #️⃣"
-        echo "tag_count=$tag_count" >> "$GITHUB_ENV"
         echo "tag_count=$tag_count" >> "$GITHUB_OUTPUT"
 
     - name: 'No tags found in repository'
-      if: env.tag_count == '0'
+      if: steps.fetch.outputs.tag_count == '0'
       shell: bash
       run: |
         # No tags found in repository
@@ -107,23 +116,26 @@ runs:
         echo 'Warning: no tags currently found in repository ⚠️'
 
     - name: 'Return current/latest tag'
-      if: env.tag_count != '0'
+      if: steps.fetch.outputs.tag_count != '0'
       id: 'latest'
       shell: bash
       # yamllint disable rule:line-length
+      env:
+        REPO_PATH: ${{ inputs.path }}
+        TYPE: ${{ inputs.type }}
       run: |
         # Return current/latest tag
-        if [ "${{ inputs.path }}" != '.' ]; then
-          cd "${{ inputs.path }}"
+        if [ "$REPO_PATH" != '.' ]; then
+          cd "$REPO_PATH"
         fi
 
         # 'both' and 'production': Match only clean semantic/calver versions
         # The $ anchor ensures tags with suffixes (e.g., v1.0.0-dev) are excluded
-        if [ "${{ inputs.type }}" = 'both' ] || [ "${{ inputs.type }}" = 'production' ]; then
+        if [ "$TYPE" = 'both' ] || [ "$TYPE" = 'production' ]; then
           tag=$(git tag -l --sort=committerdate | \
           grep -E '^(v?[0-9]+\.[0-9]+\.[0-9]+|[0-9]{4}\.[0-9]{1,2}\.[0-9]{1,2})$' | \
           sort -rV | head -1 || true)
-        elif [ "${{ inputs.type }}" = 'development' ]; then
+        elif [ "$TYPE" = 'development' ]; then
           # Match semantic versions with pre-release identifiers anywhere after version
           # Note: .* is intentionally permissive to match various separators
           # (-._) and formats like: v1.2.3-dev, v1.2.3-alpha.1, v1.2.3_beta
@@ -136,39 +148,42 @@ runs:
           exit 1
         fi
 
-        # Extract only numbers and dots; useful for later manipulation
-        numeric_tag=$(echo $tag | grep -oe '\([0-9.]*\)')
+        # Extract the leading numeric version (digits and dots only),
+        # taking just the first match so pre-release tags such as
+        # 'v1.2.3-alpha.1' yield a deterministic '1.2.3' rather than
+        # multiple partial fragments. '|| true' keeps the step from
+        # failing under '-eo pipefail' when grep finds no match or
+        # receives SIGPIPE from 'head'.
+        numeric_tag=$(echo "$tag" | grep -oE '[0-9]+(\.[0-9]+)*' | head -1 || true)
 
         echo "tag: ${tag} [${numeric_tag}]"
         echo "Current/latest repository tag: ${tag} [${numeric_tag}] 🏷️" \
           >> "$GITHUB_STEP_SUMMARY"
         echo "tag=${tag}" >> "$GITHUB_OUTPUT"
-        echo "tag=${tag}" >> "$GITHUB_ENV"
         echo "numeric_tag=${numeric_tag}" >> "$GITHUB_OUTPUT"
-        echo "numeric_tag=${numeric_tag}" >> "$GITHUB_ENV"
 
     # yamllint enable rule:line-length
     - name: 'Check if tag is semantic'
       id: 'semantic-check'
       # Do not run if no tag was found
-      if: env.tag != ''
+      if: steps.latest.outputs.tag != ''
       # yamllint disable-line rule:line-length
       uses: lfreleng-actions/tag-validate-semantic-action@96445f92479f91efd979dffb2e2610a32d7eccd0 # v0.2.1
       with:
-        string: "${{ env.tag }}"
+        string: "${{ steps.latest.outputs.tag }}"
 
     - name: 'Check if tag uses calendar versioning'
       id: 'calver-check'
       # Do not run if no tag was found
-      if: env.tag != ''
+      if: steps.latest.outputs.tag != ''
       # yamllint disable-line rule:line-length
       uses: lfreleng-actions/tag-validate-calver-action@7df739af1f55b00e04e739b774aa77ad340240d0 # v0.1.1
       with:
-        string: "${{ env.tag }}"
+        string: "${{ steps.latest.outputs.tag }}"
 
     - name: 'Report tag format/type'
       # Do not run if no tag was found
-      if: env.tag != ''
+      if: steps.latest.outputs.tag != ''
       shell: bash
       # yamllint disable rule:line-length
       run: |

@@ -177,7 +177,7 @@ runs:
       # Do not run if no tag was found
       if: steps.latest.outputs.tag != ''
       # yamllint disable-line rule:line-length
-      uses: lfreleng-actions/tag-validate-calver-action@7df739af1f55b00e04e739b774aa77ad340240d0 # v0.1.1
+      uses: lfreleng-actions/tag-validate-calver-action@67b782bb59d546ff92969b8401bc4ded3cbff890 # v0.1.2
       with:
         string: "${{ steps.latest.outputs.tag }}"
 

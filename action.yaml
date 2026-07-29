@@ -188,13 +188,16 @@ runs:
       # yamllint disable rule:line-length
       run: |
         # Report tag format/type
-        if [ "${{ steps.semantic-check.outputs.valid }}" = 'true' ]; then
+        if [ "${STEPS_SEMANTIC_CHECK_OUTPUTS_VALID}" = 'true' ]; then
           echo 'Current/latest repository tag is semantic ✅' >> "$GITHUB_STEP_SUMMARY"
           echo 'Current/latest repository tag is semantic ✅'
-        elif [ "${{ steps.calver-check.outputs.valid }}" = 'true' ]; then
+        elif [ "${STEPS_CALVER_CHECK_OUTPUTS_VALID}" = 'true' ]; then
           echo 'Current/latest repository tag uses calver ✅' >> "$GITHUB_STEP_SUMMARY"
           echo 'Current/latest repository tag uses calver ✅'
         else
           echo 'Could not identify tag type ⚠️' >> "$GITHUB_STEP_SUMMARY"
           echo 'Could not identify tag format/type ⚠️'
         fi
+      env:
+        STEPS_SEMANTIC_CHECK_OUTPUTS_VALID: ${{ steps.semantic-check.outputs.valid }}
+        STEPS_CALVER_CHECK_OUTPUTS_VALID: ${{ steps.calver-check.outputs.valid }}

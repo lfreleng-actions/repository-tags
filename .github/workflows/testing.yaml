@@ -58,28 +58,28 @@ jobs:
         shell: bash
         run: |
           # Validate Action Output
-          if [ "${{ steps.semver.outputs.tag }}" \
+          if [ "${STEPS_SEMVER_OUTPUTS_TAG}" \
             != 'v0.1.1' ]; then
             echo 'Error: did not get expected semantic tag result ❌'
-            echo "Returned: ${{ steps.semver.outputs.tag }}"
+            echo "Returned: ${STEPS_SEMVER_OUTPUTS_TAG}"
             echo 'Expected: v0.1.1'
             errors='true'
-          elif [ "${{ steps.semver.outputs.tag_count }}" \
+          elif [ "${STEPS_SEMVER_OUTPUTS_TAG_COUNT}" \
             != '2' ]; then
             echo 'Error: did not get expected semver count ❌'
-            echo "Returned: ${{ steps.semver.outputs.tag_count }}"
+            echo "Returned: ${STEPS_SEMVER_OUTPUTS_TAG_COUNT}"
             echo 'Expected: 2'
             errors='true'
-          elif [ "${{ steps.calver.outputs.tag }}" \
+          elif [ "${STEPS_CALVER_OUTPUTS_TAG}" \
             != '2025.02.01' ]; then
             echo 'Error: did not get expected calver tag result ❌'
-            echo "Returned: ${{ steps.calver.outputs.tag }}"
+            echo "Returned: ${STEPS_CALVER_OUTPUTS_TAG}"
             echo 'Expected: 2025.02.01'
             errors='true'
-          elif [ "${{ steps.calver.outputs.tag_count }}" \
+          elif [ "${STEPS_CALVER_OUTPUTS_TAG_COUNT}" \
             != '2' ]; then
             echo 'Error: did not get expected calver count ❌'
-            echo "Returned: ${{ steps.calver.outputs.tag_count }}"
+            echo "Returned: ${STEPS_CALVER_OUTPUTS_TAG_COUNT}"
             echo 'Expected: 2'
             errors='true'
           fi
@@ -90,3 +90,8 @@ jobs:
           else
             echo 'Action validation passed ✅'
           fi
+        env:
+          STEPS_SEMVER_OUTPUTS_TAG: ${{ steps.semver.outputs.tag }}
+          STEPS_SEMVER_OUTPUTS_TAG_COUNT: ${{ steps.semver.outputs.tag_count }}
+          STEPS_CALVER_OUTPUTS_TAG: ${{ steps.calver.outputs.tag }}
+          STEPS_CALVER_OUTPUTS_TAG_COUNT: ${{ steps.calver.outputs.tag_count }}

@@ -7,7 +7,7 @@
 
 Fetches tags, counts them, identifies the latest/current tag, identifies the type.
 
-## repository-tags
+## repository-tags-action
 
 ## Usage Example
 
@@ -16,7 +16,7 @@ Fetches tags, counts them, identifies the latest/current tag, identifies the typ
 ```yaml
 steps:
   - name: "Get latest repository tag"
-    uses: lfreleng-actions/repository-tags@main
+    uses: lfreleng-actions/repository-tags-action@main
 ```
 
 <!-- markdownlint-enable MD046 -->
